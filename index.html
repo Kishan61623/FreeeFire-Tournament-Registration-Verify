@@ -3,13 +3,210 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Registration Status</title>
+    <title>Free Fire Max Tournament Registration</title>
+    
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f4f9;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            /* Removed the complex SVG data URI to prevent rendering glitches */
+            /* background-image: url('data:image/svg+xml;utf8,...FF</text></svg>'); */
+            margin: 0;
+            background-repeat: repeat;
+        }
+        #registrationForm {
+            max-width: 450px;
+            width: 100%;
+            margin: 50px auto 20px;
+            background: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            border-top: 5px solid #d9534f;
+        }
+        h2 {
+            text-align: center;
+            color: #d9534f; /* Free Fire theme color */
+            margin-bottom: 25px;
+            font-size: 1.8em;
+        }
+        label {
+            display: block;
+            margin: 15px 0 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        input[type="text"], input[type="tel"] {
+            width: calc(100% - 20px);
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+        }
+        input:focus {
+            border-color: #d9534f;
+            outline: none;
+        }
+        button {
+            background-color: #5cb85c; /* Green button for action */
+            color: white;
+            padding: 12px 15px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 1.1em;
+            margin-top: 25px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #4cae4c;
+        }
+        #status {
+            text-align: center;
+            margin-top: 20px;
+            padding: 10px;
+            font-weight: bold;
+            border-radius: 5px;
+            width: 450px;
+            max-width: 100%;
+        }
+        .success {
+            background-color: #dff0d8;
+            color: #3c763d;
+            border: 1px solid #d6e9c6;
+        }
+        .error {
+            background-color: #f2dede;
+            color: #a94442;
+            border: 1px solid #ebccd1;
+        }
+    </style>
 </head>
 <body>
-    <h1>✅ Registration Submitted!</h1>
-    <p>Your squad data has been submitted for verification. Please wait a few moments.</p>
-    <p>A message confirming your unique entry will be sent to the registered mobile number within 24 hours.</p>
-    <p>If you submitted a duplicate Squad Name or Mobile Number, your entry will be automatically removed from the list, and you will not receive a confirmation.</p>
-    <a href="https://kishan61623.github.io/FreeeFire-Tournament-Registration/">Go back to registration</a>
+
+    <form id="registrationForm">
+        <h2>Free Fire Max Tournament Registration 🎮</h2>
+        
+        <label for="userName">1. Your Name (Team Captain):</label>
+        <input type="text" id="userName" name="userName" required placeholder="Enter your full name">
+
+        <label for="squadName">2. Squad Name:</label>
+        <input type="text" id="squadName" name="squadName" required placeholder="e.g., The Elite Killers">
+
+        <label for="mobileNo">3. Mobile No. (10 Digits):</label>
+        <input type="tel" id="mobileNo" name="mobileNo" pattern="[0-9]{10}" required title="Mobile number must be 10 digits only" placeholder="e.g., 9876543210">
+
+        <button type="submit">Register Squad</button>
+        
+        </form>
+    
+    <div id="status"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        // 🛑🛑🛑 STEP 1: REPLACE THESE WITH YOUR KEYS FROM SUPABASE 🛑🛑🛑
+        const SUPABASE_URL = 'YOUR_SUPABASE_PROJECT_URL'; 
+        const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+        const TABLE_NAME = 'registrations'; // Must match the table name in Supabase
+
+        // Initialize Supabase Client
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        // Helper function for robust normalization (matches database unique constraints)
+        function normalizeValue(value) {
+            // Trim whitespace, remove special characters, and convert to uppercase for checking
+            return String(value).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const form = document.getElementById('registrationForm');
+            const statusDiv = document.getElementById('status');
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const userName = document.getElementById('userName').value;
+                const squadName = document.getElementById('squadName').value;
+                const mobileNo = document.getElementById('mobileNo').value;
+
+                statusDiv.textContent = 'Checking for duplicates...';
+                statusDiv.className = '';
+                
+                // Normalizing values for comparison and storage
+                const normalizedSquadName = normalizeValue(squadName);
+                const normalizedMobileNo = normalizeValue(mobileNo);
+                
+                // 1. --- INSTANT DUPLICATE CHECK ---
+                // We check if any record has a normalized squad name OR mobile number that matches.
+                // NOTE: Supabase typically requires the query string to match the column value exactly.
+                
+                // Check if squad name or mobile number exists in the database
+                const { data: existingData, error: checkError } = await supabase
+                    .from(TABLE_NAME)
+                    .select('squadName, mobileNo')
+                    .or(`squadName.ilike.${normalizedSquadName},mobileNo.ilike.${normalizedMobileNo}`);
+
+
+                if (checkError) {
+                    console.error('Database Check Error:', checkError);
+                    statusDiv.textContent = '❌ Registration check failed due to a server error.';
+                    statusDiv.className = 'error';
+                    return;
+                }
+
+                if (existingData && existingData.length > 0) {
+                    // Determine which field is the exact duplicate for the user message
+                    const foundSquad = existingData.some(row => normalizeValue(row.squadName) === normalizedSquadName);
+                    const foundMobile = existingData.some(row => normalizeValue(row.mobileNo) === normalizedMobileNo);
+                    
+                    let message = '❌ Registration Rejected: ';
+                    if (foundSquad) {
+                        message += `Squad Name '${squadName}' is already registered. `;
+                    }
+                    if (foundMobile) {
+                        message += `Mobile Number '${mobileNo}' is already in use. `;
+                    }
+                    
+                    statusDiv.textContent = message;
+                    statusDiv.className = 'error';
+                    return; // STOP submission
+                }
+
+                // 2. --- SUBMIT VALID DATA ---
+                const { data: newData, error: insertError } = await supabase
+                    .from(TABLE_NAME)
+                    .insert([
+                        { 
+                            userName: userName, 
+                            squadName: normalizedSquadName,
+                            mobileNo: normalizedMobileNo 
+                        }
+                    ])
+                    .select();
+
+                if (insertError) {
+                    // This catches rare timing collisions that the initial check missed, often returns 409 Conflict
+                    console.error('Insert Error:', insertError);
+                    statusDiv.textContent = '❌ Registration failed due to a database conflict. Please try refreshing.';
+                    statusDiv.className = 'error';
+                    return;
+                }
+
+                // Success
+                statusDiv.textContent = '✅ Registration successful! Your squad is listed.';
+                statusDiv.className = 'success';
+                form.reset();
+            });
+        });
+    </script>
+
 </body>
 </html>
