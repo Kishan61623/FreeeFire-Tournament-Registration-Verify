@@ -14,8 +14,6 @@
             flex-direction: column;
             align-items: center;
             min-height: 100vh;
-            /* Removed the complex SVG data URI to prevent rendering glitches */
-            /* background-image: url('data:image/svg+xml;utf8,...FF</text></svg>'); */
             margin: 0;
             background-repeat: repeat;
         }
@@ -105,22 +103,21 @@
         <input type="tel" id="mobileNo" name="mobileNo" pattern="[0-9]{10}" required title="Mobile number must be 10 digits only" placeholder="e.g., 9876543210">
 
         <button type="submit">Register Squad</button>
-        
-        </form>
+    </form>
     
     <div id="status"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
         // 🛑🛑🛑 STEP 1: REPLACE THESE WITH YOUR KEYS FROM SUPABASE 🛑🛑🛑
-        const SUPABASE_URL = 'https://prvxotqmuhgpblvnconw.supabase.co'; 
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBydnhvdHFtdWhncGJsdm5jb253Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM3NTQ0NjEsImV4cCI6MjA3OTMzMDQ2MX0.oOy3O89jXqlFVQv8DDY8mRTbvJEaBjAefCG5R2apgkQ';
+        const SUPABASE_URL = 'YOUR_SUPABASE_PROJECT_URL'; 
+        const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
         const TABLE_NAME = 'registrations'; // Must match the table name in Supabase
 
         // Initialize Supabase Client
         const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         
-        // Helper function for robust normalization (matches database unique constraints)
+        // Helper function for robust normalization (matches database rule)
         function normalizeValue(value) {
             // Trim whitespace, remove special characters, and convert to uppercase for checking
             return String(value).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -129,81 +126,94 @@
         document.addEventListener('DOMContentLoaded', () => {
             const form = document.getElementById('registrationForm');
             const statusDiv = document.getElementById('status');
+            const submitButton = form.querySelector('button[type="submit"]');
 
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
+                
+                // Disable button and clear status immediately
+                submitButton.disabled = true;
+                statusDiv.textContent = 'Checking for duplicates...';
+                statusDiv.className = '';
                 
                 const userName = document.getElementById('userName').value;
                 const squadName = document.getElementById('squadName').value;
                 const mobileNo = document.getElementById('mobileNo').value;
 
-                statusDiv.textContent = 'Checking for duplicates...';
-                statusDiv.className = '';
-                
                 // Normalizing values for comparison and storage
                 const normalizedSquadName = normalizeValue(squadName);
                 const normalizedMobileNo = normalizeValue(mobileNo);
                 
-                // 1. --- INSTANT DUPLICATE CHECK ---
-                // We check if any record has a normalized squad name OR mobile number that matches.
-                // NOTE: Supabase typically requires the query string to match the column value exactly.
-                
-                // Check if squad name or mobile number exists in the database
-                const { data: existingData, error: checkError } = await supabase
-                    .from(TABLE_NAME)
-                    .select('squadName, mobileNo')
-                    .or(`squadName.ilike.${normalizedSquadName},mobileNo.ilike.${normalizedMobileNo}`);
-
-
-                if (checkError) {
-                    console.error('Database Check Error:', checkError);
-                    statusDiv.textContent = '❌ Registration check failed due to a server error.';
-                    statusDiv.className = 'error';
-                    return;
-                }
-
-                if (existingData && existingData.length > 0) {
-                    // Determine which field is the exact duplicate for the user message
-                    const foundSquad = existingData.some(row => normalizeValue(row.squadName) === normalizedSquadName);
-                    const foundMobile = existingData.some(row => normalizeValue(row.mobileNo) === normalizedMobileNo);
+                try {
+                    // 1. --- INSTANT DUPLICATE CHECK ---
                     
-                    let message = '❌ Registration Rejected: ';
-                    if (foundSquad) {
-                        message += `Squad Name '${squadName}' is already registered. `;
-                    }
-                    if (foundMobile) {
-                        message += `Mobile Number '${mobileNo}' is already in use. `;
-                    }
-                    
-                    statusDiv.textContent = message;
-                    statusDiv.className = 'error';
-                    return; // STOP submission
-                }
+                    // We check if any record has a normalized squad name OR mobile number that matches.
+                    const { data: existingData, error: checkError } = await supabase
+                        .from(TABLE_NAME)
+                        .select('squadName, mobileNo')
+                        // Using .ilike for case-insensitive matching in PostgreSQL is ideal, but for robustness
+                        // we rely on checking the normalized values returned from the select statement.
+                        .or(`squadName.ilike.${normalizedSquadName},mobileNo.ilike.${normalizedMobileNo}`);
 
-                // 2. --- SUBMIT VALID DATA ---
-                const { data: newData, error: insertError } = await supabase
-                    .from(TABLE_NAME)
-                    .insert([
-                        { 
-                            userName: userName, 
-                            squadName: normalizedSquadName,
-                            mobileNo: normalizedMobileNo 
+
+                    if (checkError) {
+                        console.error('Database Check Error:', checkError);
+                        statusDiv.textContent = '❌ Registration check failed due to a server error.';
+                        statusDiv.className = 'error';
+                        return;
+                    }
+
+                    if (existingData && existingData.length > 0) {
+                        // Determine which field is the exact duplicate for the user message
+                        const foundSquad = existingData.some(row => normalizeValue(row.squadName) === normalizedSquadName);
+                        const foundMobile = existingData.some(row => normalizeValue(row.mobileNo) === normalizedMobileNo);
+                        
+                        let message = '❌ Registration Rejected: ';
+                        if (foundSquad) {
+                            message += `Squad Name "${squadName}" is already registered. `;
                         }
-                    ])
-                    .select();
+                        if (foundMobile) {
+                            message += `Mobile Number "${mobileNo}" is already in use. `;
+                        }
+                        
+                        statusDiv.textContent = message;
+                        statusDiv.className = 'error';
+                        return; // STOP submission
+                    }
 
-                if (insertError) {
-                    // This catches rare timing collisions that the initial check missed, often returns 409 Conflict
-                    console.error('Insert Error:', insertError);
-                    statusDiv.textContent = '❌ Registration failed due to a database conflict. Please try refreshing.';
+                    // 2. --- SUBMIT VALID DATA ---
+                    const { data: newData, error: insertError } = await supabase
+                        .from(TABLE_NAME)
+                        .insert([
+                            { 
+                                userName: userName, 
+                                squadName: normalizedSquadName, // Store normalized value for simple future lookups
+                                mobileNo: normalizedMobileNo 
+                            }
+                        ])
+                        .select();
+
+                    if (insertError) {
+                        // Catches any unexpected errors or final database constraint violations
+                        console.error('Insert Error:', insertError);
+                        statusDiv.textContent = '❌ Registration failed due to a database conflict. Please try refreshing.';
+                        statusDiv.className = 'error';
+                        return;
+                    }
+
+                    // Success
+                    statusDiv.textContent = '✅ Registration successful! Your squad is listed.';
+                    statusDiv.className = 'success';
+                    form.reset();
+
+                } catch (error) {
+                    console.error('Unexpected Error:', error);
+                    statusDiv.textContent = '❌ An unexpected error occurred. Please try again.';
                     statusDiv.className = 'error';
-                    return;
+                } finally {
+                    // Re-enable the button regardless of success or failure
+                    submitButton.disabled = false;
                 }
-
-                // Success
-                statusDiv.textContent = '✅ Registration successful! Your squad is listed.';
-                statusDiv.className = 'success';
-                form.reset();
             });
         });
     </script>
